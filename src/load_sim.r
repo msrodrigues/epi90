@@ -31,15 +31,9 @@ source("~/Dropbox/Coding/R/funs/msrfun.R")
 search_sidra("lista estados")
 
 
-sim18_raw <- fetch_datasus(year_start = 2018, year_end = 2018,uf = "all", information_system = "SIM-DO") 
-sim18_raw <- sim18_raw %>% 
-  mutate( CODMUNOCOR = as.numeric(CODMUNOCOR))
-ext18 <- fetch_datasus(year_start = 2018, year_end = 2018,uf = "all", information_system ="SIM-DOEXT")
-ext18
-sim18_raw$cod
-sim18 <- left_join(sim18_raw, populacao, by = c("CODMUNOCOR" = "cod_munic6") )
-names(populacao)
-populacao <- ribge::populacao_municipios(ano = 2020)
+sim_raw <- fetch_datasus(year_start = 2017, year_end = 2018,uf = "all", information_system = "SIM-DO") 
+ext_raw <- fetch_datasus(year_start = 2018, year_end = 2018,uf = "all", information_system ="SIM-DOEXT")
 
-saveRDS(sim18, "bin/sim.rds")
+
+saveRDS(sim_raw, "bin/sim.rds")
 
