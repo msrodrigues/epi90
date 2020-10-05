@@ -1,0 +1,188 @@
+---
+title: "Exercício 01 - EPI 90"
+author: "Márcio Rodrigues"
+date: "10/5/2020"
+output: pdf_document
+---
+
+```{r Carregamento das bibliotecas e arquivos SIM, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, )
+
+library(openxlsx)
+library(scales)
+library(readxl)
+library(WriteXLS)
+library(ggthemes)
+library(RColorBrewer)
+library(lubridate)
+library(caret)
+library(tidyverse)
+library(here)
+library(usethis)
+library(googlesheets4)
+library(DescTools)
+library(obAnalytics)
+library(collapse)
+library(tictoc)
+library(ribge)
+
+Sys.setenv(TZ="Brazil/East")
+options(tz="Brazil/East")
+Sys.getenv("TZ")
+options(scipen = 999999)
+Sys.setlocale("LC_TIME", "pt_BR")
+
+source("~/Dropbox/Coding/R/funs/msrfun.R")
+
+# Carrega dados do SIM de 2018 salva em Binário no HD
+sim_raw <- loadData("~/Dropbox/Coding/R/mestrado/Epi90/epi90/bin/sim.rds")
+glimpse(sim_raw)
+
+
+
+
+
+
+# Ajusta variáveis necessárias para o exercício
+sim <- sim_raw %>% 
+  mutate(
+    estado_ocorrencia = str_extract(CODMUNOCOR,"^.."),
+    CODMUNOCOR = as.integer(as.character(CODMUNOCOR)),
+    SEXO = recode(SEXO,
+                      "0" = "Ignorado",
+                      "1" = "Masculino",
+                      "2" = "Feminino"),
+    CIRCOBITO = recode(CIRCOBITO,
+                       "9" = "Ignorado",
+                       "1" = "Acidente",
+                       "2" = "Suicídio",
+                       "3" = "Homicídio"),
+    ano = as.numeric(str_sub(DTOBITO, 5, 8))
+    
+  )
+
+
+
+
+# Carrega dados das cidades do IBGE
+cidades <- ribge::populacao_municipios(ano = 2020)
+
+
+# Regiões do Brasil
+norte <- c(11:17)
+nordeste <- c(21:29)
+sudeste <- c(31:33, 35)
+sul <- c(41:43)
+centro_oeste <- c(50:53)
+
+
+
+# Inclui a informação da região a qual a cidade pertence na tabela cidades
+cidades <-  cidades %>% 
+  mutate(
+    regiao = case_when(
+      codigo_uf %in% norte ~ "Norte",
+      codigo_uf %in% nordeste ~ "Nordeste",
+      codigo_uf %in% sudeste ~ "Sudeste",
+      codigo_uf %in% sul ~ "Sul",
+      codigo_uf %in% centro_oeste ~ "Centro Oeste",
+      TRUE ~ "NULL")
+  ) %>% 
+  group_by(regiao) %>% 
+  mutate(
+    pop_regiao = sum(populacao)
+  ) %>% ungroup() %>% 
+  group_by(uf) %>% 
+  mutate(
+    pop_estado = sum(populacao)
+  ) %>% 
+  ungroup() 
+
+
+# Seleciona variáveis e Join da tabela do SIM 
+# com a Informação da população da cidade de ocorrência
+mort <- sim %>% 
+  select(estado_ocorrencia, CODMUNOCOR, SEXO, CIRCOBITO, ano) %>% 
+  left_join(cidades, by = c("CODMUNOCOR" = "cod_munic6") ) %>% 
+  ungroup()
+
+glimpse(mort)
+```
+
+## Exercício 1
+
+Os dados da quantidade de habitantes referem-se a estimativa da população feita pelo IBGE para o ano de 2020 e provem do banco de dados de população por cidade do IBGE. Os dados de mortalidade são provenientes do SIM.
+
+### Mortalidade por Suicídio por 100k por região do Brasil em 2018
+
+a) Quais as taxas de suicídio por 100.00 habitantes no Brasil, no ano de 2018, segundo a região do país?
+
+```{r}
+# Mortalidade por 100k por região do Brasil em 2018
+mort %>% 
+  filter(!regiao == "NULL") %>% 
+  filter(ano == 2018) %>% 
+  filter(CIRCOBITO == "Suicídio") %>% 
+  group_by(regiao) %>% 
+  summarise(
+    suicidios = n(),
+    pop_regiao = unique(pop_regiao),
+    mort_100k = suicidios / pop_regiao * 10^5
+    )
+```
+
+
+### Mortalidade por suicídio por unidade da federação
+
+b) Quais as taxas de suicídio por 100.00 habitantes no Brasil, no ano de 2017, segundo a unidade da federação?
+
+```{r}
+# Mortalidade por suicídio por 100k por estado Brasil em 2018
+mortalidade_por_estado <- mort %>% 
+  filter(!regiao == "NULL") %>% 
+  filter(ano == 2017) %>% 
+  filter(CIRCOBITO == "Suicídio") %>% 
+  group_by(uf) %>% 
+  summarise(
+    suicidios = n(),
+    pop_estado = unique(pop_estado),
+    mort_100k = suicidios / pop_estado * 10^5
+    )
+
+mortalidade_por_estado
+```
+
+
+### Mortalidade por suicídio por 100k habitantes por sexo no Brasil em 2017
+
+c) Quais as taxas de suicídio por 100.00 habitantes no Brasil, no ano de 2017, segundo o sexo?
+
+Segundo IBGE, no censo de 2010 a proporção da população é de 51,03% de mulheres, dado utilizado para calcular a população de 2020, na qual os dados estão baseados. Não foi feita a estimativa da correção desta proporção.
+
+
+```{r}
+# Mortalidade por suicídio por 100k habitantes por sexo no Brasil em 2017
+
+
+# População por sexo
+populacao_total <- sum(cidades$populacao)
+populacao_F <- populacao_total * 0.5103
+
+mort %>% 
+  filter(!regiao == "NULL") %>% 
+  filter(ano == 2017) %>% 
+  filter(CIRCOBITO == "Suicídio") %>% 
+  filter(!SEXO == "Ignorado") %>% 
+  group_by(SEXO) %>% 
+  summarise(
+    suicidios = n(),
+    ) %>% 
+
+  mutate(
+    pop = c(populacao_total - populacao_F, populacao_F),
+    mort_100k = suicidios / pop * 10^5
+  ) %>% 
+  ungroup()
+
+```
+
