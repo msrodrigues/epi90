@@ -1,0 +1,310 @@
+---
+title: |
+       |Exercício 03 - EPI 90 |
+       | Análise do Estatudo
+author: "Márcio Rodrigues"
+date: "10/5/2020"
+output: pdf_document
+---
+
+```{r Carregamento das bibliotecas e arquivos SIM, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, warning = FALSE, message = FALSE)
+
+library(openxlsx)
+library(scales)
+library(readxl)
+library(WriteXLS)
+library(ggthemes)
+library(RColorBrewer)
+library(lubridate)
+library(caret)
+library(tidyverse)
+library(here)
+library(usethis)
+library(googlesheets4)
+library(DescTools)
+library(obAnalytics)
+library(collapse)
+library(tictoc)
+library(ribge)
+
+Sys.setenv(TZ="Brazil/East")
+options(tz="Brazil/East")
+Sys.getenv("TZ")
+options(scipen = 999999)
+Sys.setlocale("LC_TIME", "pt_BR")
+
+source("~/Dropbox/Coding/R/funs/msrfun.R")
+```
+
+
+Este é um exercício voltado para a análise de uma politica pública. No caso, o Estatuto do Desarmamento (Lei 10826/03 | Lei no10.826, de 22 de dezembro de 2003).
+
+O objetivo aqui é uma descrição minuciosa de alguns indicadores que podem ajudar a avaliar esse potencial impacto.
+
+A questão central é: “Qual o impacto do Estatuto do Desarmamento nas mortes por arma de fogo no *Brasil* e nas *Unidades da Federação*
+
+
+
+
+
+```{r Carregamento dos arquivos SIM mortalidade por causas externas, warning=FALSE}
+# Carrega os dados extraídos do TABNET
+# Carrega dados do SIM de causas externas do anos de 1997 a 2018 salvado em Binário no HD
+if(!exists("ext_raw")) {
+  ext_raw <- loadData("~/Dropbox/Coding/R/mestrado/Epi90/epi90/bin/ext.rds")
+}
+
+
+# Lista de Variáveis do SIM
+glimpse(ext_raw)
+
+```
+
+
+```{r}
+
+# Carrega CID10
+urlfile="https://raw.githubusercontent.com/msrodrigues/CidDataSus/master/CIDImport/Repositorio/Resources/CID-10-SUBCATEGORIAS.CSV"
+
+cid10 <-read_delim(url(urlfile), delim = ";", locale = locale(encoding = "latin1"))
+
+
+# Extrai códigos do cid relacionados a lesões por arma de fogo
+fogo <- cid10 %>% 
+  filter(grepl("((arma|armas) de fogo)", DESCRICAO)) %>% 
+  select(SUBCAT) %>% pull()
+```
+
+
+Durante o período, de 1997 a 2018, foram `r mil(nrow(ext_raw))` óbitos por causas externas.
+
+```{r Ajustes do arquivo do SIM externas, warning=FALSE}
+# Cria o banco ext (mortes por causas externas) que é o banco carrega anteriormente após ajustes
+ext <- ext_raw %>% 
+  mutate(
+    estado_ocorrencia = str_extract(CODMUNOCOR,"^.."),
+    CODMUNOCOR = as.character(CODMUNOCOR),
+    SEXO = recode(SEXO,
+                      "0" = "Ignorado",
+                      "1" = "Masculino",
+                      "2" = "Feminino"),
+    CIRCOBITO = recode(CIRCOBITO,
+                       "9" = "Ignorado",
+                       "1" = "Acidente",
+                       "2" = "Suicídio",
+                       "3" = "Homicídio"),
+    arma_de_fogo = 
+    ano = as.numeric(str_sub(DTOBITO, 5, 8))
+    
+  )
+
+```
+
+Na sequência foram carregados os dados populacionais de todas as cidades brasileiras ao longo do período.
+
+```{r Cidades IBGE, warning=FALSE}
+# Carrega dados das cidades do IBGE
+cidades_ibge <- ribge::populacao_municipios(ano = 2020)
+
+# Extração dos códigos numericos dos estados
+cod_estado <- cidades_ibge %>% 
+  select(uf, codigo_uf) %>% 
+  distinct(uf, codigo_uf)
+
+# Carregamento da população dos municipios de 1992 a 2020
+pop_mun_raw <- read_delim("~/Dropbox/Coding/R/data/populacao/pop_municipio_TCU_1992_2020.csv", 
+                          ";", escape_double = FALSE, trim_ws = TRUE)
+
+# Ajustes do banco das populações dos municipios
+pop_cidade <- pop_mun_raw %>% 
+  mutate(across(where(is.numeric), as.character)) %>% 
+  pivot_longer(cols = -Município, names_to = "ano", values_to = "pop")  %>% 
+  mutate(pop = as.numeric(pop),
+         cod = str_sub(Município, 1, 6),
+         Município = str_sub(Município, 8,-1L),
+         codigo_uf = as.numeric(str_sub(cod, 1,2)),
+         pop = ifelse(pop == "-",NA, pop)) %>% 
+  rename(municipio = Município) %>% 
+  left_join(cod_estado, by = "codigo_uf")
+
+
+# Códigos das Regiões do Brasil
+norte <- c(11:17)
+nordeste <- c(21:29)
+sudeste <- c(31:33, 35)
+sul <- c(41:43)
+centro_oeste <- c(50:53)
+
+
+
+# novos ajustes e criação do banco das cidades com variáveis auxiliares
+cidades <-  pop_cidade %>% 
+  mutate(
+    regiao = case_when(
+      codigo_uf %in% norte ~ "Norte",
+      codigo_uf %in% nordeste ~ "Nordeste",
+      codigo_uf %in% sudeste ~ "Sudeste",
+      codigo_uf %in% sul ~ "Sul",
+      codigo_uf %in% centro_oeste ~ "Centro Oeste",
+      TRUE ~ "NULL"),
+    ano = as.numeric(ano)
+  ) %>% 
+  group_by(regiao, ano) %>% 
+  mutate(
+    pop_regiao = sum(pop,na.rm = TRUE)
+  ) %>% ungroup() %>% 
+  group_by(codigo_uf, ano) %>% 
+  mutate(
+    pop_estado = sum(pop, na.rm = TRUE)
+  ) %>% 
+  ungroup()
+
+
+
+
+# Criação do banco dos estados
+estados <- cidades %>% 
+  distinct(ano,uf,pop_estado,regiao,pop_regiao, codigo_uf) 
+  
+  
+```
+
+Foi criando um banco auxiliar chamado _*mort*_ com os dados de mortalidade por causas externas combinados com  os dados do ibge quanto a população de cada cidade, estado e região no período de 1997 a 2018
+
+```{r df mortalidade, warning=FALSE}
+# Seleciona variáveis e Join da tabela do SIM 
+# com a Informação da população da cidade de ocorrência
+mort <- ext %>% 
+  group_by(estado_ocorrencia, SEXO, CIRCOBITO, ano) %>% 
+  mutate(estado_ocorrencia = as.numeric(estado_ocorrencia),
+          ano = recode(ano, `97` = 1997, `98` = 1998, `99` = 1999, `0` = 2000)) %>% 
+  tally(name = "mortes_homicidio") %>% 
+  left_join(estados, by = c("estado_ocorrencia" = "codigo_uf", "ano") ) %>% 
+  ungroup() 
+
+
+glimpse(mort)
+```
+
+
+
+Foi criado então o banco _*mort_homicidio*_ que contém a informação do número de óbitos por municipio por cada ano e também a população de cada municipio, estado e região por cada ano, o que permite o cálculo da mortalidade por 100.000.
+
+```{r}
+mort_homicidio <- mort %>% 
+  filter(CIRCOBITO == "Homicídio")  %>% 
+  group_by(ano,uf,regiao, pop_regiao, pop_estado) %>% 
+  summarise(mortes_homicidio = sum(mortes_homicidio, na.rm = TRUE)) %>% 
+  mutate(
+    mort_por_100k = mortes_homicidio / pop_estado * 10^5
+  )
+
+glimpse(mort_homicidio)
+```
+
+
+# Taxas de Homicídio
+
+Calcule as taxas de homicídio por 100.000 habitantes no Brasil, para um ano ou anos especificados (asua escolha), segundo sexo e grupo etário.
+
+Calcule as taxas de homicídio por armas de fogo por 100.000 habitantes no Brasil, do ano de 1997 até o ano de 2018, segundo UF de ocorrência.
+
+```{r}
+glimpse(ext)
+```
+
+
+## Taxas de Homicidio por 100k
+
+```{r}
+mort_100k_brasil <- mort_homicidio %>% 
+  group_by(ano) %>% 
+  summarise(
+    pop = sum(pop_estado, na.rm = TRUE),
+    mortes_homicidio = sum(mortes_homicidio, na.rm = TRUE),
+    mort_por_100k = mortes_homicidio / pop *10^5
+  )
+
+
+mort_100k_brasil %>% 
+  ggplot(aes(x = ano, y = mort_por_100k)) + geom_line() + geom_vline(xintercept = 2003.9, color = "red")
+```
+
+
+```{r}
+mort_100k_regiao <- mort_homicidio %>% 
+  group_by(ano, regiao) %>% 
+  summarise(
+    pop = sum(pop_estado, na.rm = TRUE),
+    mortes_homicidio = sum(mortes_homicidio, na.rm = TRUE),
+    mort_por_100k = mortes_homicidio / pop *10^5
+  ) %>% 
+  ungroup()
+
+
+mort_100k_regiao %>% 
+  ggplot(aes(x = ano, y = mort_por_100k, color = regiao)) + geom_line() + geom_vline(xintercept = 2003.9, color = "red")+labs(title = "Mortalidade por 100 mil habitantes, por ano", 
+    y = "Mortalidade por 100.000", subtitle = "Linha vertical vermelha representa o inicio da vigência do estatuto do desarmamento")
+```
+
+
+```{r}
+anima.regiao <- mort_100k_regiao %>% 
+  filter(!is.na(ano)) %>% 
+  ggplot(aes(x = ano, y = mort_por_100k, color = regiao)) + geom_line() +
+  transition_reveal(ano) + 
+  geom_point() +
+  geom_vline(xintercept = 2003.9, color = "red") + 
+  labs(title = "Mortalidade por 100 mil habitantes, por ano", 
+    y = "Mortalidade por 100.000", subtitle = "Linha vertical vermelha representa o inicio da vigência do estatuto do desarmamento") 
+
+animate(anima.regiao, height = 800, width = 1000,  res = 150, fps = 20, end_pause = 24, duration = 30)
+anim_save("mortalidade_homicido_regiao.gif")
+```
+  
+
+```{r}
+mort %>% 
+   filter(CIRCOBITO == "Homicídio")  %>% 
+  filter(!is.na(uf)) %>% 
+  group_by(ano, uf) %>% 
+  fill(regiao, pop_estado, pop_regiao) %>% 
+  tally()
+
+
+
+library(gganimate)
+my.animation <- mort_homicidio  %>% 
+  filter(!is.na(uf)) %>% 
+  arrange(desc(mort_por_100k)) %>% 
+  ggplot(aes(x = mort_por_100k, y = mortes_homicidio, color = regiao, size = pop_estado, label = uf)) +
+  geom_point(alpha = 0.6) + geom_text() +
+  scale_size(range = c(0.1, 15)) +
+  facet_grid(regiao ~. ) +
+  theme(legend.position="none") + 
+  labs(title = "Mortalidade por Homicidios no Brasil, de 1997 a 2018, por região",
+       subtitle = 'Ano: {frame_time}', 
+       x = 'Mortalidade por 100.00', 
+       y = 'Mortes por homicidio') +
+  transition_time(ano) +
+  ease_aes('linear')
+
+# tic()
+# animate(my.animation, height = 1000, width = 800,  res = 150, fps = 20, end_pause = 24, duration = 30)
+# toc()
+
+# anim_save("mortalidade_homicido.gif")
+
+```
+
+
+```{r}
+
+mort_homicidio  %>% 
+  filter(!is.na(uf)) %>% 
+  arrange(desc(mort_por_100k))
+
+```
+
+
