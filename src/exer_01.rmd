@@ -1,5 +1,8 @@
 ---
-title: "Exercício 01 - EPI 90"
+title: |
+       | Exercício 01
+       | - EPI 90 - 
+       | Indicadores Pactuados
 author: "Márcio Rodrigues"
 date: "10/5/2020"
 output: pdf_document

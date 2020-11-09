@@ -1,16 +1,15 @@
 ---
-title:  |
-        | Exercício 01 
-        | - EPI 90 - 
-        | Indicadores Pactuados
+title: |
+       | Exercício 02 
+       | - EPI 90 - 
+       | Taxas de Suicídio
 author: "Márcio Rodrigues"
-date: "10/5/2020"
+date: "05/10/2020"
 output: pdf_document
 ---
 
-```{r Carregamento das bibliotecas e arquivos SIM, warning=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
-
+```{r Carregamento das bibliotecas, warning=FALSE, echo=TRUE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message=FALSE )
 library(openxlsx)
 library(scales)
 library(readxl)
@@ -39,21 +38,20 @@ source("~/Dropbox/Coding/R/funs/msrfun.R")
 ```
 
 
-```{r Carregamento dos arquivos SIM, warning=FALSE}
-# Carrega os dados extraídos do TABNET
+
+```{r Carregamento Arquivos SIM, warning=FALSE, echo=FALSE}
 # Carrega dados do SIM de 2018 salvado em Binário no HD
 # Alterar esta pasta para a pasta 
-
-if(!exists("ext_raw")) {
-  ext_raw <- loadData("~/Dropbox/Coding/R/mestrado/Epi90/epi90/bin/ext.rds")
-}
-glimpse(ext_raw)
-```
+sim_raw <- loadData("~/Dropbox/Coding/R/mestrado/Epi90/epi90/bin/sim.rds")
+glimpse(sim_raw)
 
 
-```{r , warning=FALSE}
+
+
+
+
 # Ajusta variáveis necessárias para o exercício
-ext <- ext_raw %>% 
+sim <- sim_raw %>% 
   mutate(
     estado_ocorrencia = str_extract(CODMUNOCOR,"^.."),
     CODMUNOCOR = as.integer(as.character(CODMUNOCOR)),
@@ -110,29 +108,29 @@ cidades <-  cidades %>%
 
 # Seleciona variáveis e Join da tabela do SIM 
 # com a Informação da população da cidade de ocorrência
-mort <- ext %>% 
+mort <- sim %>% 
   select(estado_ocorrencia, CODMUNOCOR, SEXO, CIRCOBITO, ano) %>% 
   left_join(cidades, by = c("CODMUNOCOR" = "cod_munic6") ) %>% 
   ungroup()
 
 glimpse(mort)
-
 ```
 
 ## Exercício 1
 
-### Equipes de Atenção Básica
+Os dados da quantidade de habitantes referem-se a estimativa da população feita pelo IBGE para o ano de 2020 e provem do banco de dados de população por cidade do IBGE. Os dados de mortalidade são provenientes do SIM.
 
-a) Pergunta 1: Qual a Unidade da Federação com a menor cobertura de equipes de atenção básica entre 2010 e 2015?
+### Mortalidade por Suicídio por 100k por região do Brasil em 2018
 
-Resposta: Distrito federal: 47,63%
+a) Quais as taxas de suicídio por 100.00 habitantes no Brasil, no ano de 2018, segundo a região do país?
 
 ```{r}
 # Mortalidade por 100k por região do Brasil em 2018
 mort %>% 
   filter(!regiao == "NULL") %>% 
-  filter(CIRCOBITO == "Homicídio") %>% 
-  group_by(ano) %>% 
+  filter(ano == 2018) %>% 
+  filter(CIRCOBITO == "Suicídio") %>% 
+  group_by(regiao) %>% 
   summarise(
     suicidios = n(),
     pop_regiao = unique(pop_regiao),

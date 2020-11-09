@@ -1,0 +1,62 @@
+---
+title: |
+       |Exercício 04 - EPI 90 |
+       | Sistema de Informações Hospitalares
+author: "Márcio Rodrigues"
+date: "31/10/2020"
+output: pdf_document
+---
+
+```{r Carregamento das bibliotecas e arquivos SIM, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, warning = FALSE, message = FALSE)
+
+library(openxlsx)
+library(scales)
+library(readxl)
+library(WriteXLS)
+library(ggthemes)
+library(RColorBrewer)
+library(lubridate)
+library(caret)
+library(tidyverse)
+library(here)
+library(usethis)
+library(googlesheets4)
+library(DescTools)
+library(obAnalytics)
+library(collapse)
+library(tictoc)
+library(ribge)
+
+Sys.setenv(TZ="Brazil/East")
+options(tz="Brazil/East")
+Sys.getenv("TZ")
+options(scipen = 999999)
+Sys.setlocale("LC_TIME", "pt_BR")
+
+source("~/Dropbox/Coding/R/funs/msrfun.R")
+```
+
+## Questão 01
+
+Qual o número de internações hospitalares decorrentes de acidente de trânsito por UF no período considerado?
+
+
+
+```{r}
+# Qual o período considerado?
+
+
+```
+
+
+
+## Questão 02
+
+Quais as caraterísticas das internações hospitalares decorrentes de acidente de trânsito no período considerado?
+
+
+## Questão 03
+
+Houve algum impacto da COVID 19 nos gastos e nas caraterísticas das internações por acidentes
+de trânsito?

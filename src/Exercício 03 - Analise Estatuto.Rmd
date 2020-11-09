@@ -42,10 +42,11 @@ Este é um exercício voltado para a análise de uma politica pública. No caso,
 
 O objetivo aqui é uma descrição minuciosa de alguns indicadores que podem ajudar a avaliar esse potencial impacto.
 
-A questão central é: “Qual o impacto do Estatuto do Desarmamento nas mortes por arma de fogo no *Brasil* e nas *Unidades da Federação*
+A questão central é: “Qual o impacto do Estatuto do Desarmamento nas mortes por arma de fogo no *Brasil* e nas *Unidades da Federação*.
 
 
 
+## Carregamento dos dados de mortalidade
 
 
 ```{r Carregamento dos arquivos SIM mortalidade por causas externas, warning=FALSE}
@@ -59,8 +60,13 @@ if(!exists("ext_raw")) {
 # Lista de Variáveis do SIM
 glimpse(ext_raw)
 
+
 ```
 
+
+## Carregamento do CID-10
+
+Foram carregados os arquivos do CID 10 para identificar os códigos relacionados a morte por arma de fogo. A idéia foi identificar (através do _flag booleano_ arma_de_fogo) no banco da mortalidade por causas externas todas aquelas que tiveram qualquer relação com arma de fogo.
 
 ```{r}
 
@@ -94,10 +100,12 @@ ext <- ext_raw %>%
                        "1" = "Acidente",
                        "2" = "Suicídio",
                        "3" = "Homicídio"),
-    arma_de_fogo = 
-    ano = as.numeric(str_sub(DTOBITO, 5, 8))
+    arma_de_fogo = ifelse(CAUSABAS %in% fogo, TRUE, FALSE),
+    ano = as.numeric(str_sub(DTOBITO, 5, 8)),
+    ano = recode(ano, `97` = 1997, `98` = 1998, `99` = 1999, `0` = 2000)
     
   )
+
 
 ```
 
@@ -126,9 +134,34 @@ pop_cidade <- pop_mun_raw %>%
          codigo_uf = as.numeric(str_sub(cod, 1,2)),
          pop = ifelse(pop == "-",NA, pop)) %>% 
   rename(municipio = Município) %>% 
-  left_join(cod_estado, by = "codigo_uf")
+  left_join(cod_estado, by = "codigo_uf")   # adiciono a abreviação do estado
+
+glimpse(pop_cidade) 
+
+pop_cidade %>% 
+  group_by(ano) %>% 
+  summarise(n = sum(!is.na(pop)),
+            pop_br = sum(pop, na.rm = TRUE)
+  )
+```
 
 
+
+## Carregamento da população dos estados
+
+```{r Cidades IBGE, warning=FALSE}
+pops <- read_delim("~/Dropbox/Coding/R/mestrado/Epi90/epi90/data/pop_estados_brasil_1992_2019.csv", ";", escape_double = FALSE, trim_ws = TRUE) %>% 
+  filter(!`Unidade da Federação` == "Total")
+
+
+
+
+  
+
+```
+
+
+```{r Cidades IBGE, warning=FALSE}
 # Códigos das Regiões do Brasil
 norte <- c(11:17)
 nordeste <- c(21:29)
@@ -138,8 +171,16 @@ centro_oeste <- c(50:53)
 
 
 
-# novos ajustes e criação do banco das cidades com variáveis auxiliares
-cidades <-  pop_cidade %>% 
+pop_br <- pops %>% 
+  pivot_longer(cols = -`Unidade da Federação`, names_to = "ano", values_to = "pop_estado") %>% 
+  rename(estado = `Unidade da Federação`) %>% 
+  mutate(
+    codigo_uf = as.numeric(str_sub(estado, 1,2)),
+    estado = str_sub(estado, 4, -1L),
+    ano = as.numeric(ano)
+  ) %>% 
+  left_join(cod_estado, by = "codigo_uf") %>% 
+  group_by(ano) %>% 
   mutate(
     regiao = case_when(
       codigo_uf %in% norte ~ "Norte",
@@ -148,25 +189,53 @@ cidades <-  pop_cidade %>%
       codigo_uf %in% sul ~ "Sul",
       codigo_uf %in% centro_oeste ~ "Centro Oeste",
       TRUE ~ "NULL"),
-    ano = as.numeric(ano)
+    pop_br = sum(pop_estado, na.rm = TRUE)
   ) %>% 
+  ungroup() %>% 
   group_by(regiao, ano) %>% 
   mutate(
-    pop_regiao = sum(pop,na.rm = TRUE)
-  ) %>% ungroup() %>% 
-  group_by(codigo_uf, ano) %>% 
-  mutate(
-    pop_estado = sum(pop, na.rm = TRUE)
-  ) %>% 
-  ungroup()
+    pop_regiao = sum(pop_estado, na.rm = TRUE),
+    prop_regiao = pop_regiao / pop_br
+  )
+
+glimpse(pop_br)
+
+```
 
 
-
-
-# Criação do banco dos estados
-estados <- cidades %>% 
-  distinct(ano,uf,pop_estado,regiao,pop_regiao, codigo_uf) 
-  
+```{r Cidades IBGE, warning=FALSE}
+# novos ajustes e criação do banco das cidades com variáveis auxiliares
+# cidades <-  pop_cidade %>% 
+#   mutate(
+#     regiao = case_when(
+#       codigo_uf %in% norte ~ "Norte",
+#       codigo_uf %in% nordeste ~ "Nordeste",
+#       codigo_uf %in% sudeste ~ "Sudeste",
+#       codigo_uf %in% sul ~ "Sul",
+#       codigo_uf %in% centro_oeste ~ "Centro Oeste",
+#       TRUE ~ "NULL"),
+#     ano = as.numeric(ano)
+#   ) %>% 
+#   group_by(regiao, ano) %>% 
+#   mutate(
+#     pop_regiao = sum(pop,na.rm = TRUE)
+#   ) %>% ungroup() %>% 
+#   group_by(codigo_uf, ano) %>% 
+#   mutate(
+#     pop_estado = sum(pop, na.rm = TRUE)
+#   ) %>% 
+#   ungroup()
+# 
+# 
+# pop_cidade %>% 
+#   group_by(ano) %>% 
+#   summarise(pop_brasil = sum(pop, na.rm = TRUE))
+# 
+# 
+# # Criação do banco dos estados
+# estados <- cidades %>% 
+#   distinct(ano,uf,pop_estado,regiao,pop_regiao, codigo_uf) 
+#   
   
 ```
 
@@ -175,33 +244,46 @@ Foi criando um banco auxiliar chamado _*mort*_ com os dados de mortalidade por c
 ```{r df mortalidade, warning=FALSE}
 # Seleciona variáveis e Join da tabela do SIM 
 # com a Informação da população da cidade de ocorrência
-mort <- ext %>% 
-  group_by(estado_ocorrencia, SEXO, CIRCOBITO, ano) %>% 
+mort_arma_fogo <- ext %>% 
+  filter(arma_de_fogo) %>% 
+  group_by(estado_ocorrencia, ano) %>% 
   mutate(estado_ocorrencia = as.numeric(estado_ocorrencia),
           ano = recode(ano, `97` = 1997, `98` = 1998, `99` = 1999, `0` = 2000)) %>% 
-  tally(name = "mortes_homicidio") %>% 
-  left_join(estados, by = c("estado_ocorrencia" = "codigo_uf", "ano") ) %>% 
-  ungroup() 
+  tally(name = "mortes_arma_fogo_uf") %>% 
+  left_join(pop_br, by = c("estado_ocorrencia" = "codigo_uf", "ano") ) %>% 
+  ungroup() %>% 
+  group_by(ano) %>% 
+  mutate(mort_100k_uf = mortes_arma_fogo_uf / pop_estado *10^5,
+         mortes_arma_fogo_br = sum(mortes_arma_fogo_uf, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  group_by(ano,regiao) %>% 
+  mutate(mortes_arma_fogo_regiao = sum(mortes_arma_fogo_uf, na.rm = TRUE),
+         mort_100k_regiao = mortes_arma_fogo_regiao / pop_regiao * 10^5) %>% 
+  ungroup() %>% 
+  group_by(ano) %>% 
+  mutate(mort_100k_br = mortes_arma_fogo_br / pop_br * 10^5)
 
 
-glimpse(mort)
+glimpse(mort_arma_fogo)
 ```
 
 
 
-Foi criado então o banco _*mort_homicidio*_ que contém a informação do número de óbitos por municipio por cada ano e também a população de cada municipio, estado e região por cada ano, o que permite o cálculo da mortalidade por 100.000.
+Foi criado então o banco _*mort_arma_fogo*_ que contém a informação do número de óbitos por arma de fogo, por estado por cada ano e também a população de cada estado e região por cada ano, o que permite o cálculo da mortalidade por 100.000 para cada estamento (estado, região e país).
 
 ```{r}
-mort_homicidio <- mort %>% 
-  filter(CIRCOBITO == "Homicídio")  %>% 
+mort_fogo <- mort_arma_fogo %>% 
   group_by(ano,uf,regiao, pop_regiao, pop_estado) %>% 
-  summarise(mortes_homicidio = sum(mortes_homicidio, na.rm = TRUE)) %>% 
+  summarise(mortes_arma_fogo_uf = sum(mortes_arma_fogo, na.rm = TRUE)) %>% 
+  ungroup() %>% 
   mutate(
-    mort_por_100k = mortes_homicidio / pop_estado * 10^5
+    mort_por_100k_uf = mortes_arma_fogo_uf / pop_estado * 10^5
   )
 
-glimpse(mort_homicidio)
+glimpse(mort_fogo)
 ```
+
+
 
 
 # Taxas de Homicídio
@@ -211,7 +293,24 @@ Calcule as taxas de homicídio por 100.000 habitantes no Brasil, para um ano ou 
 Calcule as taxas de homicídio por armas de fogo por 100.000 habitantes no Brasil, do ano de 1997 até o ano de 2018, segundo UF de ocorrência.
 
 ```{r}
-glimpse(ext)
+homicidios_anuais_br <- ext %>% 
+  filter(CIRCOBITO == "Homicídio") %>% 
+  group_by(ano) %>% 
+  summarise(homicidios = n()) %>% 
+  ungroup()
+
+pop_br <- cidades %>% 
+  group_by(ano) %>% 
+  summarise(pop_brasil = sum(pop, na.rm = TRUE)) %>% 
+  ungroup()
+
+mort_homicidio_br <- left_join(homicidios_anuais_br, pop_br, by = "ano") %>% 
+  filter(!is.na(ano)) %>%
+  mutate(
+    mort_100k = homicidios / pop_brasil * 10^5
+  )
+
+glimpse(mort_homicidio_br)
 ```
 
 
@@ -228,7 +327,7 @@ mort_100k_brasil <- mort_homicidio %>%
 
 
 mort_100k_brasil %>% 
-  ggplot(aes(x = ano, y = mort_por_100k)) + geom_line() + geom_vline(xintercept = 2003.9, color = "red")
+  ggplot(aes(x = ano, y = mort_por_100k)) + geom_line() + geom_vline(xintercept = 2003.9780822, color = "red")
 ```
 
 
@@ -244,7 +343,7 @@ mort_100k_regiao <- mort_homicidio %>%
 
 
 mort_100k_regiao %>% 
-  ggplot(aes(x = ano, y = mort_por_100k, color = regiao)) + geom_line() + geom_vline(xintercept = 2003.9, color = "red")+labs(title = "Mortalidade por 100 mil habitantes, por ano", 
+  ggplot(aes(x = ano, y = mort_por_100k, color = regiao)) + geom_line() + geom_vline(xintercept = 2003.9780822, color = "red")+labs(title = "Mortalidade por 100 mil habitantes, por ano", 
     y = "Mortalidade por 100.000", subtitle = "Linha vertical vermelha representa o inicio da vigência do estatuto do desarmamento")
 ```
 
@@ -255,7 +354,7 @@ anima.regiao <- mort_100k_regiao %>%
   ggplot(aes(x = ano, y = mort_por_100k, color = regiao)) + geom_line() +
   transition_reveal(ano) + 
   geom_point() +
-  geom_vline(xintercept = 2003.9, color = "red") + 
+  geom_vline(xintercept = 2003.9780822, color = "red") + 
   labs(title = "Mortalidade por 100 mil habitantes, por ano", 
     y = "Mortalidade por 100.000", subtitle = "Linha vertical vermelha representa o inicio da vigência do estatuto do desarmamento") 
 

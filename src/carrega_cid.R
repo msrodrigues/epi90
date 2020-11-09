@@ -25,7 +25,10 @@ source("~/Dropbox/Coding/R/funs/msrfun.R")
 
 urlfile="https://raw.githubusercontent.com/msrodrigues/CidDataSus/master/CIDImport/Repositorio/Resources/CID-10-SUBCATEGORIAS.CSV"
 
-cid10 <-read_delim(url(urlfile), delim = ";", locale = locale(encoding = "windows-1250"))
+cid10 <-read_delim(url(urlfile), delim = ";", locale = locale(encoding = "latin1"))
 
-cid10 %>% 
-  filter(grepl("fogo", DESCRICAO)) %>% select(DESCRICAO)
+fogo <- cid10 %>% 
+  filter(grepl("((arma|armas) de fogo)", DESCRICAO)) %>% 
+  select(SUBCAT) %>% pull()
+
+
